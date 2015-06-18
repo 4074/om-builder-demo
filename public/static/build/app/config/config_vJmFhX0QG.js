@@ -1,0 +1,1 @@
+define(function(r){r.onError=function(r){throw console.log("timeout"===r.requireType?"Error:modules: "+r.requireModules:"Error:"+r.requireType),r};var e={baseUrl:"/public/static/build/",paths:{jquery:"lib/jquery_vuzhLyE7a",underscore:"lib/underscore_vXOKgP80K",main:"app/main_v1B2M2Y8A"},waitSeconds:15,shim:{main:["jquery","underscore"]}};return require.config(e),e});

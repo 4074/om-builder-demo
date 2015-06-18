@@ -45,11 +45,13 @@ function scanFolder(folder, sub, patterns, reversal, exts, extre){
                     }
                 }
                 
-                match && fileList.push({
-                    folder: filepath,
-                    name: item,
-                    extname: extname
-                })
+//                match && fileList.push({
+//                    folder: filepath,
+//                    name: item,
+//                    extname: extname
+//                })
+                
+                match && fileList.push(path.parse(_path))
             }
         })
     }
@@ -74,17 +76,22 @@ function isIgnore(filepath, patterns, reversal){
     return reversal ? !hasMatch : hasMatch
 }
 
+function getFileRename(filepath, name){
+    var newName = cryFile(filepath)
+    newName = name.split('_')[0] + '_v' + newName.substr(0, 8).replace(/[\/\+]/g, '0')
+    return newName
+}
+
 // 获取需要改名的文件列表
 function getRenameList(list){
     var renameList = []
     
     list.forEach(function(item){
         
-        if(!item.extname || item.extname == '.') return;
+        if(!item.ext || item.ext == '.') return;
         
-        var filepath = item.folder + path.sep + item.name
-        var newName = cryFile(filepath)
-        newName = path.basename(item.name, item.extname).split('_')[0] + '_v' + newName.substr(0, 8).replace(/[\/\+]/g, '0') + item.extname
+        var filepath = item.dir + path.sep + item.base
+        var newName = getFileRename(filepath, item.name)
         
         if(item.name != newName){
             item.rename = newName
@@ -121,49 +128,32 @@ function writeLog(log, type){
     err && console.log(err)
 }
 
-function getRebuildLog(){
-    var logPath = logFolder + path.sep + 'log-rebuild.json'
-    
-    var logJson = []
-    if(fs.existsSync(logPath)){
-        logJson = JSON.parse(fs.readFileSync(logPath, 'utf-8') || '[]')
-    }
-    
-    return logJson
-}
-
-function writeRebuildLog(logJson){
-    var logPath = logFolder + path.sep + 'log-rebuild.json'
-    
-    var err = fs.writeFileSync(logPath, JSON.stringify(logJson))
-    err && console.log(err)
-}
-
 // 修改模版文件
 function rewriteView(tpllist, renamelist){
     var log = []
     tpllist.forEach(function(item){
-        var itempath = item.folder + path.sep + item.name
+        var itempath = item.dir + path.sep + item.base
         var content = fs.readFileSync(itempath, {
             encoding: 'utf-8'
         })
         
         
         renamelist.forEach(function(re_item){
-            var reg = new RegExp('\"([^"]*' + re_item.name + ')\"')
-            var reg_repalce = new RegExp('(\"[^"]*)(' + re_item.name + ')(\")', 'g')
+            
+            var reg = new RegExp('\"([^"]*' + re_item.base + ')\"')
+            var reg_repalce = new RegExp('(\"[^"]*)(' + re_item.base + ')(\")', 'g')
             var matches = content.match(reg)
             if(!matches || !matches.length || !matches[1]) return;
             
             matches[1] = transPathSep(matches[1])
             
-            var re_path = path.isAbsolute(matches[1]) ? root + matches[1] : path.resolve(item.folder, matches[1])
+            var re_path = path.isAbsolute(matches[1]) ? root + matches[1] : path.resolve(item.dir, matches[1])
             
-            var filepath = transPathSep(re_item.folder + path.sep + re_item.name)
+            var filepath = transPathSep(re_item.dir + path.sep + re_item.base)
 
             if(re_path == filepath){
                 content = content.replace(reg_repalce, function($1, $2, $3, $4){
-                    return $2 + re_item.rename + $4
+                    return $2 + re_item.rename + re_item.ext + $4
                 })
             }
             
@@ -173,6 +163,7 @@ function rewriteView(tpllist, renamelist){
                 filepath: itempath.replace(root, ''),
                 name: re_item.name,
                 rename: re_item.rename,
+                ext: re_item.ext,
                 result: err ? 'fail' : 'success',
                 err: err
             })
@@ -186,12 +177,13 @@ function rewriteView(tpllist, renamelist){
 function renameFile(renamelist){
     var log = []
     renamelist.forEach(function(item){
-        var err = fs.renameSync(item.folder + path.sep + item.name, item.folder + path.sep + item.rename)
+        var err = fs.renameSync(item.dir + path.sep + item.base, item.dir + path.sep + item.rename + item.ext)
         
         log.push({
-            filepath: item.folder.replace(root, '') + path.sep + item.name,
+            filepath: item.dir.replace(root, '') + path.sep + item.base,
             name: item.name,
             rename: item.rename,
+            ext: item.ext,
             result: err ? 'fail' : 'success',
             err: err
         })
@@ -204,56 +196,6 @@ function transPathSep(filepath){
     return filepath.replace(/\//g, '\\')
 }
 
-function svnDelAndAdd(list){
-    return;
-    var rebuild = getRebuildLog()
-    var delArr = [], addArr = []
-
-    if(rebuild.length){
-        var _log = rebuild[rebuild.length-1]
-        
-        if(!_log.svndel){
-            _log.log.rename.forEach(function(item){
-                var del_path = path.relative(root, root + item.filepath)
-                delArr.push(del_path)
-            })
-        }
-        _log.svndel = true
-        
-        writeRebuildLog(rebuild)
-    }
-
-    
-    list.forEach(function(item){
-        //delArr.push(path.relative(root, item.folder + path.sep + item.name))
-        addArr.push(path.relative(root, item.folder + path.sep + item.rename))
-    })
-    
-    delArr.forEach(function(item){
-        _delete(item)
-    })
-    addArr.forEach(function(item){
-        _add(item)
-    })
-    
-    function _delete(_path){
-        console.log('svn del ' + _path)
-        return; 
-        
-        client.cmd(['delete', _path], function(err, res){
-            
-        })
-    }
-    
-    function _add(_path){
-        console.log('svn add ' + _path)
-        return;
-        
-        client.add(_path, function(err, res){
-            
-        })
-    }
-}
 
 module.exports = {
     scanFolder: scanFolder,
@@ -261,6 +203,5 @@ module.exports = {
     renameFile: renameFile,
     rewriteView: rewriteView,
     writeLog: writeLog,
-    getRebuildLog: getRebuildLog,
-    svnDelAndAdd: svnDelAndAdd
+    getFileRename: getFileRename
 }
